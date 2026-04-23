@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -96,12 +97,26 @@ public class MigrateData extends BaseExecutor {
             targetConn.setAutoCommit(false);
 
             boolean allOk = true;
+
+            // Phase 1: clean target tables in REVERSE order so that child rows are
+            // deleted before their parent rows, respecting FK constraints.
+            if (cleanFirst) {
+                output.println("-- Cleaning phase (reverse order) --");
+                List<String> reversed = new ArrayList<>(config.getTables());
+                Collections.reverse(reversed);
+                for (String table : reversed) {
+                    allOk &= cleanTable(targetConn, table);
+                }
+                targetConn.commit();
+                output.println("-- Migration phase (forward order) --");
+            }
+
+            // Phase 2: populate tables in the original (forward) order so that
+            // parent rows exist before child rows are inserted.
             for (String table : config.getTables()) {
-                boolean ok = migrateTable(sourceConn, targetConn, table, cleanFirst);
+                boolean ok = copyTable(sourceConn, targetConn, table);
                 if (!ok) {
                     allOk = false;
-                    log.error("Migration failed for table [{}]", table);
-                    output.println("ERROR: Migration failed for table: " + table);
                 }
             }
 
@@ -117,38 +132,37 @@ public class MigrateData extends BaseExecutor {
         }
     }
 
-    private boolean migrateTable(Connection source, Connection target,
-                                 String table, boolean cleanFirst) {
-        log.info("migrateTable : [{}]", table);
-        output.print("  Table [" + table + "] ... ");
-
-        try {
-            if (cleanFirst) {
-                cleanTable(target, table);
-            }
-
-            long rows = copyTable(source, target, table);
-            output.println(rows + " rows migrated.");
-            log.info("migrateTable [{}] : {} rows migrated", table, rows);
+    private boolean cleanTable(Connection target, String table) {
+        log.info("cleanTable : [{}]", table);
+        output.print("  Clean [" + table + "] ... ");
+        try (Statement stmt = target.createStatement()) {
+            int deleted = stmt.executeUpdate("DELETE FROM " + table);
+            output.println(deleted + " rows deleted.");
+            log.info("cleanTable [{}] : {} rows deleted", table, deleted);
             return true;
-
         } catch (SQLException e) {
             output.println("FAILED: " + e.getMessage());
-            log.error("migrateTable [{}] failed: {}", table, e.getMessage());
+            log.error("cleanTable [{}] failed: {}", table, e.getMessage());
             return false;
         }
     }
 
-    private void cleanTable(Connection target, String table) throws SQLException {
-        log.info("cleanTable : [{}]", table);
-        String sql = "DELETE FROM " + table;
-        try (Statement stmt = target.createStatement()) {
-            int deleted = stmt.executeUpdate(sql);
-            log.info("cleanTable [{}] : {} rows deleted", table, deleted);
+    private boolean copyTable(Connection source, Connection target, String table) {
+        log.info("copyTable : [{}]", table);
+        output.print("  Copy  [" + table + "] ... ");
+        try {
+            long rows = doCopyTable(source, target, table);
+            output.println(rows + " rows migrated.");
+            log.info("copyTable [{}] : {} rows migrated", table, rows);
+            return true;
+        } catch (SQLException e) {
+            output.println("FAILED: " + e.getMessage());
+            log.error("copyTable [{}] failed: {}", table, e.getMessage());
+            return false;
         }
     }
 
-    private long copyTable(Connection source, Connection target, String table) throws SQLException {
+    private long doCopyTable(Connection source, Connection target, String table) throws SQLException {
         String selectSql = "SELECT * FROM " + table;
 
         try (Statement srcStmt = source.createStatement();

@@ -248,6 +248,12 @@ and the tool continues with the remaining tables.
   This handles all standard SQL types (text, integer, boolean, timestamp, UUID, JSON, etc.)
   without explicit type conversion code.
 
+- **Two-phase execution with `-x`:** when cleaning is requested the tool runs two
+  distinct phases. Phase 1 deletes all target tables in **reverse** configuration
+  order (child tables before parent tables) to satisfy FK constraints. Phase 2
+  then populates all tables in **forward** order so that parent rows exist before
+  child rows are inserted.
+
 - **Clean uses DELETE, not TRUNCATE:** `DELETE FROM table` is used instead of
   `TRUNCATE … CASCADE`. `TRUNCATE CASCADE` can silently cascade to tables outside
   the configured list, potentially deleting data you did not intend to touch.
