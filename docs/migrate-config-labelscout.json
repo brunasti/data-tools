@@ -3,7 +3,7 @@
     "name": "Production",
     "server": "10.7.1.18",
     "port": "5432",
-    "db_name": "cgmstocksender",
+    "db_name": "labelscout",
     "login": "postgres",
     "password": "postgres"
   },
@@ -11,12 +11,22 @@
     "name": "Staging",
     "server": "10.7.1.22",
     "port": "5432",
-    "db_name": "cgmstocksender",
+    "db_name": "labelscout",
     "login": "postgres",
     "password": "postgres"
   },
   "tables": [
-    "voorraad",
-    "apotheek"
+    "apotheek",
+    "apotheek_groep",
+    "audit_log",
+    "gebruiker",
+    "groep",
+    "groothandel",
+    "groothandel_voorraad",
+    "label",
+    "logger",
+    "product",
+    "request_response_audit",
+    "voorraad_cluster"
   ]
 }
