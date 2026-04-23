@@ -1,0 +1,25 @@
+{
+  "source": {
+    "name": "Production",
+    "server": "prod.db.example.com",
+    "port": "5432",
+    "db_name": "myapp_prod",
+    "login": "readonly_user",
+    "password": "secret"
+  },
+  "target": {
+    "name": "Staging",
+    "server": "staging.db.example.com",
+    "port": "5432",
+    "db_name": "myapp_staging",
+    "login": "admin_user",
+    "password": "secret"
+  },
+  "tables": [
+    "categories",
+    "products",
+    "customers",
+    "orders",
+    "order_lines"
+  ]
+}
