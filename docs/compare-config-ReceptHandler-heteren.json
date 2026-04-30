@@ -16,5 +16,6 @@
     "login": "receipthandler-heteren",
     "password": "receipthandler-heteren"
   },
-  "schemas": ["public"]
+  "schemas": ["public"],
+  "output_file": "./reports/report-receipthandler-heteren.md"
 }

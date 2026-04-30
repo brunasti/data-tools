@@ -20,4 +20,6 @@ public class JsonCompareConfig {
     public JsonDbRecord target;
     /** Optional list of schemas to compare. Defaults to ["public"] when null or empty. */
     public List<String> schemas;
+    /** Optional default output file for the Markdown report. Overridden by the -o CLI option. */
+    public String output_file;
 }

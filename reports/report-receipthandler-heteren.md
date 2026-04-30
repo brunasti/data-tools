@@ -43,9 +43,9 @@
 
 #### Index differences
 
-| Index | Status | Definition |
+| Index | Side | Definition |
 |---|---|---|
-| `receipt_queue_id_index` | only in TARGET | CREATE INDEX receipt_queue_id_index ON public.receipt USING btree (queue_id) INCLUDE (queue_id) WITH (deduplicate_items='true') |
+| `receipt_queue_id_index` | TARGET | `CREATE INDEX receipt_queue_id_index ON public.receipt USING btree (queue_id) INCLUDE (queue_id) WITH (deduplicate_items='true')` |
 
 ## Identical Tables
 

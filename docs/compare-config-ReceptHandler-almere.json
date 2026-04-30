@@ -15,5 +15,6 @@
     "login": "receipthandler",
     "password": "receipthandler"
   },
-  "schemas": ["public"]
+  "schemas": ["public"],
+  "output_file": "./reports/report-receipthandler-almere.md"
 }

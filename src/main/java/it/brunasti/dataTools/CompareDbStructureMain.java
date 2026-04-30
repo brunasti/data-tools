@@ -6,6 +6,8 @@
  */
 package it.brunasti.dataTools;
 
+import it.brunasti.dataTools.utils.DbConnectionUtils;
+import it.brunasti.dataTools.utils.JsonCompareConfig;
 import org.apache.commons.cli.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,7 +52,7 @@ public class CompareDbStructureMain extends BaseMain {
         Option optionHelp       = new Option("h", "help",   false, "Print this help message");
         Option optionShortUsage = new Option("?", false,           "Quick reference");
         Option optionConfigFile = new Option("c", "config", true,  "Path to JSON comparison configuration file");
-        Option optionOutputFile = new Option("o", "output", true,  "Output file path for the Markdown report (default: stdout)");
+        Option optionOutputFile = new Option("o", "output", true,  "Output file path for the Markdown report (overrides 'output_file' in config; default: stdout)");
 
         options.addOption(optionHelp);
         options.addOption(optionShortUsage);
@@ -107,7 +109,21 @@ public class CompareDbStructureMain extends BaseMain {
         }
 
         log.info("configurationFile [{}]", configurationFile);
-        log.info("outputFile        [{}]", outputFile);
+
+        // If -o was not given on the CLI, fall back to output_file from the config
+        if (outputFile.isEmpty()) {
+            try {
+                JsonCompareConfig config = DbConnectionUtils.loadCompareConfig(configurationFile);
+                if (config.output_file != null && !config.output_file.isBlank()) {
+                    outputFile = config.output_file;
+                    log.info("outputFile resolved from config: [{}]", outputFile);
+                }
+            } catch (IOException e) {
+                // Ignore — compare() will report the load failure properly
+            }
+        }
+
+        log.info("outputFile        [{}]", outputFile.isEmpty() ? "(stdout)" : outputFile);
 
         boolean success;
 

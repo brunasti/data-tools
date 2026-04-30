@@ -1,7 +1,7 @@
 {
   "source": {
     "name": "source-db",
-    "server": "10.7.1.18",
+    "server": "10.7.1.22",
     "port": "5432",
     "db_name": "receipthandler",
     "login": "receipthandler",
@@ -9,11 +9,12 @@
   },
   "target": {
     "name": "target-db",
-    "server": "10.7.1.18",
+    "server": "10.7.1.22",
     "port": "5432",
     "db_name": "receipthandler-heteren",
     "login": "receipthandler-heteren",
     "password": "receipthandler-heteren"
   },
-  "schemas": ["public"]
+  "schemas": ["public"],
+  "output_file": "./reports/report-receipthandler-staging.md"
 }
