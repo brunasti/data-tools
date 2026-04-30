@@ -31,6 +31,14 @@ public class DbConnectionUtils {
         }
     }
 
+    public static JsonCompareConfig loadCompareConfig(String jsonFile) throws IOException {
+        log.info("loadCompareConfig : {}", jsonFile);
+        Gson gson = new Gson();
+        try (Reader reader = new FileReader(jsonFile)) {
+            return gson.fromJson(reader, JsonCompareConfig.class);
+        }
+    }
+
     public static Connection getConnection(JsonDbRecord dbRecord) {
         log.info("getConnection : {}", dbRecord.name);
         return getConnection(dbRecord.db_name, dbRecord.login, dbRecord.password,

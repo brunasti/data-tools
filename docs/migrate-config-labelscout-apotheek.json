@@ -1,0 +1,29 @@
+{
+  "source": {
+    "name": "Production",
+    "server": "10.7.1.18",
+    "port": "5432",
+    "db_name": "labelscout",
+    "login": "postgres",
+    "password": "postgres"
+  },
+  "target": {
+    "name": "Staging",
+    "server": "10.7.1.22",
+    "port": "5432",
+    "db_name": "labelscout",
+    "login": "postgres",
+    "password": "postgres"
+  },
+  "tables": [
+    "voorraad_cluster",
+    "apotheek_groep",
+    "groothandel",
+    "groep",
+    "apotheek",
+    "label",
+    "product",
+    "gebruiker",
+    "groothandel_voorraad"
+  ]
+}
