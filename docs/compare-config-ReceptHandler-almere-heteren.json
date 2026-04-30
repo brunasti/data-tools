@@ -1,0 +1,19 @@
+{
+  "source": {
+    "name": "source-db",
+    "server": "10.7.1.18",
+    "port": "5432",
+    "db_name": "receipthandler",
+    "login": "receipthandler",
+    "password": "receipthandler"
+  },
+  "target": {
+    "name": "target-db",
+    "server": "10.7.1.18",
+    "port": "5432",
+    "db_name": "receipthandler-heteren",
+    "login": "receipthandler-heteren",
+    "password": "receipthandler-heteren"
+  },
+  "schemas": ["public"]
+}
