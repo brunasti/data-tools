@@ -81,55 +81,54 @@ public class MigrateData extends BaseExecutor {
 
         try (Connection sourceConn = DbConnectionUtils.getConnection(config.getSource());
              Connection targetConn = DbConnectionUtils.getConnection(config.getTarget())) {
-
-            if (sourceConn == null) {
-                log.error("Could not establish connection to source database");
-                output.println("ERROR: Cannot connect to source database.");
-                return false;
-            }
-            if (targetConn == null) {
-                log.error("Could not establish connection to target database");
-                output.println("ERROR: Cannot connect to target database.");
-                return false;
-            }
-
-            // Disable auto-commit on target for batch performance
-            targetConn.setAutoCommit(false);
-
-            boolean allOk = true;
-
-            // Phase 1: clean target tables in REVERSE order so that child rows are
-            // deleted before their parent rows, respecting FK constraints.
-            if (cleanFirst) {
-                output.println("-- Cleaning phase (reverse order) --");
-                List<String> reversed = new ArrayList<>(config.getTables());
-                Collections.reverse(reversed);
-                for (String table : reversed) {
-                    allOk &= cleanTable(targetConn, table);
-                }
-                targetConn.commit();
-                output.println("-- Migration phase (forward order) --");
-            }
-
-            // Phase 2: populate tables in the original (forward) order so that
-            // parent rows exist before child rows are inserted.
-            for (String table : config.getTables()) {
-                boolean ok = copyTable(sourceConn, targetConn, table);
-                if (!ok) {
-                    allOk = false;
-                }
-            }
-
-            targetConn.commit();
-            output.println("-------------------");
-            output.println("Migration " + (allOk ? "COMPLETED successfully." : "COMPLETED WITH ERRORS."));
-            return allOk;
-
+            return doMigrate(config, sourceConn, targetConn, cleanFirst);
         } catch (SQLException e) {
             log.error("Database error during migration: {}", e.getMessage());
             output.println("ERROR: " + e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Executes the actual migration given pre-opened connections.
+     * Package-private so tests can call it directly without touching static methods.
+     */
+    boolean doMigrate(JsonMigrateConfig config, Connection sourceConn, Connection targetConn,
+                      boolean cleanFirst) throws SQLException {
+        if (sourceConn == null) {
+            log.error("Could not establish connection to source database");
+            output.println("ERROR: Cannot connect to source database.");
+            return false;
+        }
+        if (targetConn == null) {
+            log.error("Could not establish connection to target database");
+            output.println("ERROR: Cannot connect to target database.");
+            return false;
+        }
+
+        targetConn.setAutoCommit(false);
+        boolean allOk = true;
+
+        if (cleanFirst) {
+            output.println("-- Cleaning phase (reverse order) --");
+            List<String> reversed = new ArrayList<>(config.getTables());
+            Collections.reverse(reversed);
+            for (String table : reversed) {
+                allOk &= cleanTable(targetConn, table);
+            }
+            targetConn.commit();
+            output.println("-- Migration phase (forward order) --");
+        }
+
+        for (String table : config.getTables()) {
+            boolean ok = copyTable(sourceConn, targetConn, table);
+            if (!ok) allOk = false;
+        }
+
+        targetConn.commit();
+        output.println("-------------------");
+        output.println("Migration " + (allOk ? "COMPLETED successfully." : "COMPLETED WITH ERRORS."));
+        return allOk;
     }
 
     private boolean cleanTable(Connection target, String table) {

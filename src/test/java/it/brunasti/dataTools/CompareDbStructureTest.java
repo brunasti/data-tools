@@ -35,57 +35,48 @@ class CompareDbStructureTest {
     }
 
     // -------------------------------------------------------------------------
-    // Config loading failures
+    // Config loading failures — real IO, no mock needed
     // -------------------------------------------------------------------------
 
     @Test
     void compare_missingConfigFile_returnsFalse() {
-        // Real call — no mock needed; file absent → IOException → false
         assertFalse(comparator.compare("no-such-file.json"));
     }
 
     // -------------------------------------------------------------------------
-    // Connection failures (no CALLS_REAL_METHODS — plain mockStatic defaults null)
+    // Config loading short-circuit — mockStatic only, no Connection mock
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_bothConnectionsFail_returnsFalse() {
+    void compare_configLoaded_noConnections_returnsFalse() {
         JsonCompareConfig cfg = buildConfig(List.of("public"));
 
         try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
             utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            // getConnection not stubbed → returns null by default
-
+            // getConnection not stubbed → returns null → doCompare returns false
             assertFalse(comparator.compare("cfg.json"));
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Connection failures — doCompare() directly, no mockStatic
+    // -------------------------------------------------------------------------
+
     @Test
-    void compare_sourceConnectionFails_returnsFalse() {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
-
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            // First call (source) → null, second call (target) → mock
-            utils.when(() -> DbConnectionUtils.getConnection(any()))
-                 .thenReturn(null, mock(Connection.class));
-
-            assertFalse(comparator.compare("cfg.json"));
-        }
+    void doCompare_bothConnectionsNull_returnsFalse() throws SQLException {
+        assertFalse(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), null, null));
     }
 
     @Test
-    void compare_targetConnectionFails_returnsFalse() {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_sourceNull_returnsFalse() throws SQLException {
+        Connection tgt = mock(Connection.class);
+        assertFalse(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), null, tgt));
+    }
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            // First call (source) → mock, second call (target) → null
-            utils.when(() -> DbConnectionUtils.getConnection(any()))
-                 .thenReturn(mock(Connection.class), null);
-
-            assertFalse(comparator.compare("cfg.json"));
-        }
+    @Test
+    void doCompare_targetNull_returnsFalse() throws SQLException {
+        Connection src = mock(Connection.class);
+        assertFalse(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, null));
     }
 
     // -------------------------------------------------------------------------
@@ -93,19 +84,14 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_emptySchemas_reportContainsHeader() throws SQLException {
+    void doCompare_emptySchemas_reportContainsHeader() throws SQLException {
         JsonCompareConfig cfg = buildConfig(List.of("public"));
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupEmptySchema(src);
         setupEmptySchema(tgt);
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(cfg, List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("# DB Structure Comparison"));
         assertTrue(report.contains("src_db"));
@@ -115,40 +101,28 @@ class CompareDbStructureTest {
     }
 
     // -------------------------------------------------------------------------
-    // Default schema fallback
+    // Default schema fallback — doCompare() with null/empty schemas
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_nullSchemas_defaultsToPublic() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(null);
+    void doCompare_nullSchemas_defaultsToPublic() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupEmptySchema(src);
         setupEmptySchema(tgt);
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(null), null, src, tgt));
         assertTrue(output.toString().contains("public"));
     }
 
     @Test
-    void compare_emptySchemasList_defaultsToPublic() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of());
+    void doCompare_emptySchemasList_defaultsToPublic() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupEmptySchema(src);
         setupEmptySchema(tgt);
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of()), List.of(), src, tgt));
         assertTrue(output.toString().contains("public"));
     }
 
@@ -157,19 +131,13 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_identicalEmptySchemas_reportsZeroDifferences() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_identicalEmptySchemas_reportsZeroDifferences() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupEmptySchema(src);
         setupEmptySchema(tgt);
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("| Tables only in SOURCE | 0 |"));
         assertTrue(report.contains("| Tables only in TARGET | 0 |"));
@@ -179,19 +147,13 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_identicalOneTableSchemas_reportedAsIdentical() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_identicalOneTableSchemas_reportedAsIdentical() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupSchemaOneTable(src, "users", "id", "integer");
         setupSchemaOneTable(tgt, "users", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("| Identical tables | 1 |"));
         assertTrue(report.contains("## Identical Tables"));
@@ -204,19 +166,13 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_tableOnlyInSource_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_tableOnlyInSource_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupSchemaOneTable(src, "extra_table", "id", "integer");
         setupEmptySchema(tgt);
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("| Tables only in SOURCE | 1 |"));
         assertTrue(report.contains("## Tables only in SOURCE"));
@@ -225,19 +181,13 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_tableOnlyInTarget_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_tableOnlyInTarget_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
         setupEmptySchema(src);
         setupSchemaOneTable(tgt, "new_table", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("| Tables only in TARGET | 1 |"));
         assertTrue(report.contains("## Tables only in TARGET"));
@@ -250,23 +200,16 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_columnOnlyInSource_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnOnlyInSource_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
-        // Source: users(id, email); Target: users(id)
         setupSchemaWithColumns(src, "users",
                 col("id",    "integer",            1, null, null, null, "NO",  null),
                 col("email", "character varying",   2, 100,  null, null, "YES", null));
         setupSchemaOneTable(tgt, "users", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Columns only in SOURCE"));
         assertTrue(report.contains("`email`"));
@@ -274,8 +217,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_columnOnlyInTarget_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnOnlyInTarget_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -284,20 +226,14 @@ class CompareDbStructureTest {
                 col("id",         "integer",                      1, null, null, null, "NO",  null),
                 col("created_at", "timestamp without time zone",  2, null, null, null, "YES", null));
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Columns only in TARGET"));
         assertTrue(report.contains("`created_at`"));
     }
 
     @Test
-    void compare_columnNullabilityDiffers_reportedAsPropertyDiff() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnNullabilityDiffers_reportedAsPropertyDiff() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -306,12 +242,7 @@ class CompareDbStructureTest {
         setupSchemaWithColumns(tgt, "users",
                 col("email", "character varying", 1, 200, null, null, "NO",  null));
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Column property differences"));
         assertTrue(report.contains("is_nullable"));
@@ -320,8 +251,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_columnTypeDiffers_reportedAsPropertyDiff() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnTypeDiffers_reportedAsPropertyDiff() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -330,12 +260,7 @@ class CompareDbStructureTest {
         setupSchemaWithColumns(tgt, "users",
                 col("age", "bigint",  1, null, null, null, "YES", null));
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("data_type"));
         assertTrue(report.contains("integer"));
@@ -343,8 +268,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_columnDefaultDiffers_reportedAsPropertyDiff() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnDefaultDiffers_reportedAsPropertyDiff() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -353,18 +277,12 @@ class CompareDbStructureTest {
         setupSchemaWithColumns(tgt, "users",
                 col("status", "integer", 1, null, null, null, "NO", "1"));
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         assertTrue(output.toString().contains("column_default"));
     }
 
     @Test
-    void compare_columnPositionDiffers_reportedAsPropertyDiff() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_columnPositionDiffers_reportedAsPropertyDiff() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -373,12 +291,7 @@ class CompareDbStructureTest {
         setupSchemaWithColumns(tgt, "users",
                 col("name", "character varying", 2, 100, null, null, "NO", null));
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         assertTrue(output.toString().contains("position"));
     }
 
@@ -387,8 +300,7 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_indexOnlyInSource_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_indexOnlyInSource_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -397,12 +309,7 @@ class CompareDbStructureTest {
                 "CREATE INDEX idx_users_email ON public.users USING btree (email)");
         setupSchemaOneTable(tgt, "users", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Index differences"));
         assertTrue(report.contains("idx_users_email"));
@@ -410,8 +317,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_indexOnlyInTarget_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_indexOnlyInTarget_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -420,12 +326,7 @@ class CompareDbStructureTest {
                 "idx_users_name",
                 "CREATE INDEX idx_users_name ON public.users USING btree (name)");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Index differences"));
         assertTrue(report.contains("TARGET"));
@@ -436,8 +337,7 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_constraintOnlyInSource_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_constraintOnlyInSource_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -445,12 +345,7 @@ class CompareDbStructureTest {
                 "users_pkey", "PRIMARY KEY (id)");
         setupSchemaOneTable(tgt, "users", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Constraint differences"));
         assertTrue(report.contains("users_pkey"));
@@ -458,8 +353,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_constraintOnlyInTarget_reportedCorrectly() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_constraintOnlyInTarget_reportedCorrectly() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -467,12 +361,7 @@ class CompareDbStructureTest {
         setupSchemaWithConstraint(tgt, "users", "id", "integer",
                 "uq_users_email", "UNIQUE (email)");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("Constraint differences"));
         assertTrue(report.contains("uq_users_email"));
@@ -480,8 +369,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_constraintChangedDefinition_reportedAsChanged() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_constraintChangedDefinition_reportedAsChanged() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -492,12 +380,7 @@ class CompareDbStructureTest {
                 "orders_fk",
                 "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         String report = output.toString();
         assertTrue(report.contains("SOURCE (changed)"));
         assertTrue(report.contains("TARGET (changed)"));
@@ -506,8 +389,7 @@ class CompareDbStructureTest {
     }
 
     @Test
-    void compare_checkConstraintShowsFullExpression() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public"));
+    void doCompare_checkConstraintShowsFullExpression() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
@@ -515,12 +397,7 @@ class CompareDbStructureTest {
                 "items_check_qty", "CHECK ((quantity > 0))");
         setupSchemaOneTable(tgt, "items", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public")), List.of("public"), src, tgt));
         assertTrue(output.toString().contains("CHECK ((quantity > 0))"));
     }
 
@@ -529,20 +406,15 @@ class CompareDbStructureTest {
     // -------------------------------------------------------------------------
 
     @Test
-    void compare_multipleSchemas_usesSchemaQualifiedKey() throws SQLException {
-        JsonCompareConfig cfg = buildConfig(List.of("public", "audit"));
+    void doCompare_multipleSchemas_usesSchemaQualifiedKey() throws SQLException {
         Connection src = mock(Connection.class);
         Connection tgt = mock(Connection.class);
 
         setupSchemaWithTableInSchema(src, "public", "events", "id", "integer");
         setupSchemaWithTableInSchema(tgt, "public", "events", "id", "integer");
 
-        try (MockedStatic<DbConnectionUtils> utils = mockStatic(DbConnectionUtils.class)) {
-            utils.when(() -> DbConnectionUtils.loadCompareConfig(anyString())).thenReturn(cfg);
-            utils.when(() -> DbConnectionUtils.getConnection(any())).thenReturn(src, tgt);
-
-            assertTrue(comparator.compare("cfg.json"));
-        }
+        assertTrue(comparator.doCompare(buildConfig(List.of("public", "audit")),
+                List.of("public", "audit"), src, tgt));
         assertTrue(output.toString().contains("public.events"));
     }
 
@@ -592,8 +464,6 @@ class CompareDbStructureTest {
     private void setupSchemaWithTableInSchema(Connection conn, String schema,
                                               String table, String colName, String dataType)
             throws SQLException {
-        // Build all ResultSets BEFORE any when().thenReturn() to avoid
-        // Mockito UnfinishedStubbingException caused by nested when() calls.
         ResultSet tablesRs = mock(ResultSet.class);
         when(tablesRs.next()).thenReturn(true, false);
         when(tablesRs.getString("table_schema")).thenReturn(schema);
@@ -615,7 +485,6 @@ class CompareDbStructureTest {
     /** One table with multiple columns, no indexes, no constraints. */
     private void setupSchemaWithColumns(Connection conn, String table, ColDef... cols)
             throws SQLException {
-        // Build ResultSets first, then wire to statements.
         ResultSet tablesRs = singleTableRs("public", table);
         ResultSet colsRs   = multiColRs("public", table, cols);
         ResultSet empty1   = emptyRs();
@@ -703,26 +572,19 @@ class CompareDbStructureTest {
                 col(colName, dataType, position, null, null, null, "NO", null));
     }
 
-    /**
-     * Builds a columns ResultSet returning one row per ColDef using Mockito
-     * sequential-return chaining.
-     */
     private ResultSet multiColRs(String schema, String table, ColDef... cols) throws SQLException {
         ResultSet rs = mock(ResultSet.class);
         int n = cols.length;
 
-        // next(): n trues then one false
         Boolean[] nextSeq = new Boolean[n + 1];
         Arrays.fill(nextSeq, true);
         nextSeq[n] = false;
         when(rs.next()).thenReturn(nextSeq[0],
                 Arrays.copyOfRange(nextSeq, 1, nextSeq.length));
 
-        // Fixed-per-RS columns
         when(rs.getString("table_schema")).thenReturn(schema);
         when(rs.getString("table_name")).thenReturn(table);
 
-        // Per-row sequential returns
         String[] names     = new String[n];
         String[] types     = new String[n];
         int[]    positions = new int[n];
@@ -743,11 +605,11 @@ class CompareDbStructureTest {
             defaults[i]  = cols[i].columnDefault();
         }
 
-        stubStringSeq(rs, "column_name",   names);
-        stubStringSeq(rs, "data_type",     types);
-        stubStringSeq(rs, "is_nullable",   nullable);
+        stubStringSeq(rs, "column_name",    names);
+        stubStringSeq(rs, "data_type",      types);
+        stubStringSeq(rs, "is_nullable",    nullable);
         stubStringSeq(rs, "column_default", defaults);
-        stubIntSeq(rs, "ordinal_position", positions);
+        stubIntSeq(rs, "ordinal_position",  positions);
         stubIntOrNullSeq(rs,
                 "character_maximum_length", charMax,
                 "numeric_precision",        numPrec,
@@ -776,10 +638,6 @@ class CompareDbStructureTest {
         }
     }
 
-    /**
-     * Stubs three nullable-integer columns plus the wasNull() sequence.
-     * For each row, wasNull() is called 3 times (once per int-or-null column).
-     */
     private void stubIntOrNullSeq(ResultSet rs,
                                   String col1, Integer[] vals1,
                                   String col2, Integer[] vals2,
@@ -795,7 +653,6 @@ class CompareDbStructureTest {
         stubIntSeq(rs, col2, raw2);
         stubIntSeq(rs, col3, raw3);
 
-        // wasNull: 3 calls per row (col1, col2, col3)
         Boolean[] wasNulls = new Boolean[n * 3];
         for (int i = 0; i < n; i++) {
             wasNulls[i * 3]     = (vals1[i] == null);

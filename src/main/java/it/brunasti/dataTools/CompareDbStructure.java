@@ -101,30 +101,36 @@ public class CompareDbStructure extends BaseExecutor {
             return false;
         }
 
-        List<String> schemas = (config.schemas != null && !config.schemas.isEmpty())
-                ? config.schemas
-                : List.of("public");
-
-        log.info("Schemas to compare: {}", schemas);
-
         try (Connection src = DbConnectionUtils.getConnection(config.source);
              Connection tgt = DbConnectionUtils.getConnection(config.target)) {
-
-            if (src == null || tgt == null) {
-                log.error("Failed to establish one or both database connections");
-                return false;
-            }
-
-            Map<String, TableInfo> srcSchema = loadSchema(src, schemas);
-            Map<String, TableInfo> tgtSchema = loadSchema(tgt, schemas);
-
-            renderMarkdown(config, schemas, srcSchema, tgtSchema);
-            return true;
-
+            return doCompare(config, config.schemas, src, tgt);
         } catch (SQLException e) {
             log.error("Database error during comparison: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Executes the comparison given pre-opened connections.
+     * Package-private so tests can call it directly without touching static methods.
+     * A null or empty {@code schemas} list defaults to {@code ["public"]}.
+     */
+    boolean doCompare(JsonCompareConfig config, List<String> schemas,
+                      Connection src, Connection tgt) throws SQLException {
+        List<String> effectiveSchemas = (schemas != null && !schemas.isEmpty())
+                ? schemas : List.of("public");
+        log.info("Schemas to compare: {}", effectiveSchemas);
+
+        if (src == null || tgt == null) {
+            log.error("Failed to establish one or both database connections");
+            return false;
+        }
+
+        Map<String, TableInfo> srcSchema = loadSchema(src, effectiveSchemas);
+        Map<String, TableInfo> tgtSchema = loadSchema(tgt, effectiveSchemas);
+
+        renderMarkdown(config, effectiveSchemas, srcSchema, tgtSchema);
+        return true;
     }
 
     // -------------------------------------------------------------------------
