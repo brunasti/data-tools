@@ -187,25 +187,24 @@ public class CompareDbStructure extends BaseExecutor {
             }
         }
 
-        // -- constraints (PK, UNIQUE, FK, CHECK) --
+        // -- constraints: use pg_constraint + pg_get_constraintdef for full SQL definitions
+        // (information_schema loses the CHECK expression and FK target details)
         String conSql =
-                "SELECT tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type, " +
-                "       string_agg(kcu.column_name, ', ' ORDER BY kcu.ordinal_position) AS cols " +
-                "FROM information_schema.table_constraints tc " +
-                "LEFT JOIN information_schema.key_column_usage kcu " +
-                "       ON kcu.constraint_name = tc.constraint_name " +
-                "      AND kcu.table_schema    = tc.table_schema " +
-                "WHERE tc.table_schema IN (" + inClause + ") " +
-                "  AND tc.constraint_type IN ('PRIMARY KEY','UNIQUE','FOREIGN KEY','CHECK') " +
-                "GROUP BY tc.table_schema, tc.table_name, tc.constraint_name, tc.constraint_type " +
-                "ORDER BY tc.table_name, tc.constraint_type, tc.constraint_name";
+                "SELECT n.nspname AS table_schema, t.relname AS table_name, " +
+                "       c.conname AS constraint_name, " +
+                "       pg_get_constraintdef(c.oid) AS definition " +
+                "FROM pg_constraint c " +
+                "JOIN pg_class t     ON t.oid = c.conrelid " +
+                "JOIN pg_namespace n ON n.oid = t.relnamespace " +
+                "WHERE n.nspname IN (" + inClause + ") " +
+                "  AND c.contype IN ('p','u','f','c') " +
+                "ORDER BY t.relname, c.contype, c.conname";
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(conSql)) {
             while (rs.next()) {
                 String key = tableKey(rs.getString("table_schema"), rs.getString("table_name"), schemas);
                 TableInfo ti = result.get(key);
                 if (ti != null) {
-                    String desc = rs.getString("constraint_type") + "(" + rs.getString("cols") + ")";
-                    ti.constraints().put(rs.getString("constraint_name"), desc);
+                    ti.constraints().put(rs.getString("constraint_name"), rs.getString("definition"));
                 }
             }
         }
@@ -370,11 +369,11 @@ public class CompareDbStructure extends BaseExecutor {
     }
 
     private void renderMapDiff(PrintStream out, String label, Map<String, String> src, Map<String, String> tgt) {
-        Set<String> srcOnly = new TreeSet<>(src.keySet());
-        srcOnly.removeAll(tgt.keySet());
+        Set<String> srcOnlyKeys = new TreeSet<>(src.keySet());
+        srcOnlyKeys.removeAll(tgt.keySet());
 
-        Set<String> tgtOnly = new TreeSet<>(tgt.keySet());
-        tgtOnly.removeAll(src.keySet());
+        Set<String> tgtOnlyKeys = new TreeSet<>(tgt.keySet());
+        tgtOnlyKeys.removeAll(src.keySet());
 
         List<String> changed = src.keySet().stream()
                 .filter(tgt::containsKey)
@@ -382,19 +381,40 @@ public class CompareDbStructure extends BaseExecutor {
                 .sorted()
                 .collect(Collectors.toList());
 
-        if (srcOnly.isEmpty() && tgtOnly.isEmpty() && changed.isEmpty()) return;
+        if (srcOnlyKeys.isEmpty() && tgtOnlyKeys.isEmpty() && changed.isEmpty()) return;
 
         out.println("#### " + label + " differences");
         out.println();
-        out.println("| " + label + " | Status | Definition |");
-        out.println("|---|---|---|");
-        srcOnly.forEach(k  -> out.println("| `" + k + "` | only in SOURCE | " + src.get(k) + " |"));
-        tgtOnly.forEach(k  -> out.println("| `" + k + "` | only in TARGET | " + tgt.get(k) + " |"));
-        changed.forEach(k -> {
-            out.println("| `" + k + "` | changed SOURCE | " + src.get(k) + " |");
-            out.println("| `" + k + "` | changed TARGET | " + tgt.get(k) + " |");
-        });
-        out.println();
+
+        // Source-only and target-only sections: sort rows by definition so that
+        // constraints with different names but identical definitions appear adjacent,
+        // making visual matching straightforward.
+        if (!srcOnlyKeys.isEmpty() || !tgtOnlyKeys.isEmpty()) {
+            List<String[]> srcRows = srcOnlyKeys.stream()
+                    .map(k -> new String[]{k, src.get(k)})
+                    .sorted(Comparator.comparing(r -> r[1]))
+                    .collect(Collectors.toList());
+            List<String[]> tgtRows = tgtOnlyKeys.stream()
+                    .map(k -> new String[]{k, tgt.get(k)})
+                    .sorted(Comparator.comparing(r -> r[1]))
+                    .collect(Collectors.toList());
+
+            out.println("| " + label + " | Side | Definition |");
+            out.println("|---|---|---|");
+            srcRows.forEach(r -> out.println("| `" + r[0] + "` | SOURCE | `" + r[1] + "` |"));
+            tgtRows.forEach(r -> out.println("| `" + r[0] + "` | TARGET | `" + r[1] + "` |"));
+            out.println();
+        }
+
+        if (!changed.isEmpty()) {
+            out.println("| " + label + " | Side | Definition |");
+            out.println("|---|---|---|");
+            changed.forEach(k -> {
+                out.println("| `" + k + "` | SOURCE (changed) | `" + src.get(k) + "` |");
+                out.println("| `" + k + "` | TARGET (changed) | `" + tgt.get(k) + "` |");
+            });
+            out.println();
+        }
     }
 
     // -------------------------------------------------------------------------
