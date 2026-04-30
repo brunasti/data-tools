@@ -69,6 +69,12 @@
             <version>5.10.2</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.14.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -87,6 +93,22 @@
                             <version>1.18.38</version>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <!-- Allow Mockito's byte-buddy agent to attach on Java 21,
+                         and open the java.sql and java.lang packages so ByteBuddy
+                         can instrument Connection / Statement / ResultSet interfaces
+                         when mockStatic() is active in the same test. -->
+                    <argLine>
+                        -XX:+EnableDynamicAgentLoading
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.sql/java.sql=ALL-UNNAMED
+                    </argLine>
                 </configuration>
             </plugin>
             <plugin>

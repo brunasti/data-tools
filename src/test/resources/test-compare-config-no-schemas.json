@@ -1,0 +1,18 @@
+{
+  "source": {
+    "name": "test-source",
+    "server": "localhost",
+    "port": "5432",
+    "db_name": "test_source_db",
+    "login": "testuser",
+    "password": "testpass"
+  },
+  "target": {
+    "name": "test-target",
+    "server": "localhost",
+    "port": "5432",
+    "db_name": "test_target_db",
+    "login": "testuser",
+    "password": "testpass"
+  }
+}
