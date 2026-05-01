@@ -1,0 +1,44 @@
+Session prompts — data-tools / CompareDbStructure feature
+==========================================================
+
+1. Hello Claude!
+
+2. I would like to add one more tool to the one in this project.
+
+3. With the same structure, I would like a tool which compare the structure of two db
+   instance, and shows the differences in a text output (possibly in markdown format)
+
+4. Perfect!
+
+5. Well... in the case of the DB as addressed in the file
+   docs/compare-config-ReceptHandler-almere-heteren.json, as reported in the result
+   report-prod.md, there are many differences in the constraints... which probably are
+   only differences in the names. Could you report something more, as the full definition
+   of the each constraints, so that I can visually check if there are two matching in the
+   source and target lists?
+
+6. Can you add one execution option which indicate that the name of the output .md file is
+   in the configuration file under the attribute 'output_file'? The option could be a
+   simple flag as '-O', or the fact that no '-o xxxx.md' is defined and the 'output_file'
+   exists in the configuration file....
+
+7. Can you please generate a full test coverage set of JUnit tests?
+
+8. There are problems in the tests:
+   Underlying exception : org.mockito.exceptions.base.MockitoException:
+   Could not modify all classes [interface java.lang.AutoCloseable,
+   interface java.sql.Connection, interface java.sql.Wrapper]
+
+9. I still have many errors in the test:
+   Underlying exception : org.mockito.exceptions.base.MockitoException:
+   Could not modify all classes [interface java.lang.AutoCloseable,
+   interface java.sql.Connection, interface java.sql.Wrapper]
+   [...] Mockito cannot mock this class: interface java.sql.Connection.
+
+10. How did you execute the tests?
+
+11. Why in my IntelliJ the tests don't succedd? Can you please check the config and env?
+
+12. Perfect! Now all works fine :-)
+
+13. Can you please write into a file compare-db-prompt.txt all the prompts of this session?
